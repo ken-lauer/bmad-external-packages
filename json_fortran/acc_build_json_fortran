@@ -1,0 +1,122 @@
+#!/bin/bash
+
+# Script to make the PLplot libraries.
+# Exit Codes found in /usr/include/sysexits.h
+
+#set -x
+
+# Function to configure, make and then install the Package - contains Package Specific build configuration
+
+func_configure_make_install() {
+
+  [ "${BUILD_TYPE}" == "debug" ] &&
+    CMAKE_BUILD_TYPE="Debug" ||
+    CMAKE_BUILD_TYPE="Release"
+
+  [ -d ${UTIL_DIR}/bin ] &&
+    PATH=${UTIL_DIR}/bin${PATH:+:${PATH}}
+
+  [ "${CMAKE_BINARY}" ] ||
+    CMAKE_BINARY=cmake
+
+  # Disable the inclusion of RPATH for Releases but not Distributions, as requsted by dcs16 in RT#64118
+  if [ ${DIST_BUILD} ]; then
+    ENABLE_RPATH="ON"
+  else
+    ENABLE_RPATH="OFF"
+  fi
+
+  cd ${WORK_DIR}
+
+  export CXXFLAGS="-fvisibility=hidden ${CFLAGS}"
+
+  [ "${FC}" == "gfortran" ] &&
+    export FFLAGS="-std=legacy -fall-intrinsics -fvisibility=hidden -pedantic ${FFLAGS}"
+
+  export FCFLAGS="${FFLAGS} ${FCFLAGS}"
+
+  if [ "${ARGUMENTS[1]}" == "-test" ]; then
+    TEST_STATUS=ON
+    PLD_PSC=ON
+  else
+    TEST_STATUS=OFF
+    PLD_PSC=OFF
+  fi
+
+  CMAKE_CONF_OPTIONS=()
+
+  if [ ! -e ALREADY_BUILT ]; then
+
+    if [ "${BUILD_SHARED}" -eq 1 ]; then
+      echo -e "\nBuilding SHARED Libraries...\n"
+      BUILD_SHARED_LIBS=ON
+      SHARED=ON
+      ${CMAKE_BINARY} -DCMAKE_INSTALL_PREFIX=${OUTPUT_DIR} \
+        -DCMAKE_VERBOSE_MAKEFILE=true \
+        "${CMAKE_CONF_OPTIONS[@]}" \
+        -DBUILD_SHARED_LIBS=${SHARED} \
+        -DUSE_RPATH=${ENABLE_RPATH} \
+        -DBUILD_TEST=${TEST_STATUS} \
+        ../
+
+      func_print_compiler_linker_flags
+
+      ${GMAKE} -j all
+      ${GMAKE} install
+
+      export RETVAL=$?
+    fi
+
+    # Added support for SHARED only library builds, as requested in RT#63875
+    if [ "${BUILD_SHARED_ONLY}" -ne 1 ]; then
+      echo -e "\nBuilding STATIC Libraries...\n"
+      BUILD_SHARED_LIBS=OFF
+      SHARED=OFF
+      ${CMAKE_BINARY} -DCMAKE_INSTALL_PREFIX=${OUTPUT_DIR} \
+        -DCMAKE_VERBOSE_MAKEFILE=true \
+        "${CMAKE_CONF_OPTIONS[@]}" \
+        -DBUILD_SHARED_LIBS=${SHARED} \
+        -DUSE_RPATH=${ENABLE_RPATH} \
+        -DBUILD_TEST=${TEST_STATUS} \
+        ../
+
+      func_print_compiler_linker_flags
+
+      ${GMAKE} -j all
+      ${GMAKE} install
+
+      export RETVAL=$?
+    fi
+  fi
+
+  if [ "${ARGUMENTS[1]}" == "-test" ]; then
+    echo -e "\nBuilding tests for $(echo ${PACKAGE_VERSION})...\n"
+
+    VESRION_NUMBER=$(echo ${PACKAGE_VERSION} | awk ' { print $3 } ')
+    mkdir -p ${OUTPUT_DIR}/share/plplot${VESRION_NUMBER}/examples
+    cd ${OUTPUT_DIR}/share/plplot${VESRION_NUMBER}/examples
+    cmake -DPLD_psc=${PLD_PSC} -DBUILD_TEST=${TEST_STATUS}
+    ${GMAKE} -j test_noninteractive
+    export RETVAL=$?
+    if [ "${RETVAL}" -eq 0 ]; then
+      echo -e "\nLook for output from all tests in\n\n    ${OUTPUT_DIR}/share/plplot${VESRION_NUMBER}/examples/test_examples_output_dir\n"
+    fi
+  fi
+
+  if ([ $(uname) == "Darwin" ] && [ "${FC}" == "ifort" ] && [ "${RETVAL}" -eq 0 ]); then
+    ln -s /opt/intel/lib/* ${OUTPUT_DIR}/lib/ &>/dev/null 2>&1
+  fi
+
+  if [ -d ${OUTPUT_DIR}/lib/fortran/modules/plplot ]; then
+    cp ${OUTPUT_DIR}/lib/fortran/modules/plplot/* ${OUTPUT_DIR}/modules
+  fi
+}
+
+# Function that contains Package Specific files and directories to be removed
+
+func_remove_package() {
+
+  rm -f ${OUTPUT_DIR}/lib/lib*
+  rm -rf ${BUILD_TYPE}
+
+}
