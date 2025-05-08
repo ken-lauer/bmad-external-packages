@@ -51,7 +51,9 @@ func_configure_make_install() {
       echo -e "\nBuilding SHARED Libraries...\n"
       BUILD_SHARED_LIBS=ON
       SHARED=ON
-      ${CMAKE_BINARY} -DCMAKE_INSTALL_PREFIX=${OUTPUT_DIR} \
+      ${CMAKE_BINARY} \
+        -DCMAKE_INSTALL_PREFIX=${OUTPUT_DIR} \
+        -DUSE_GNU_INSTALL_CONVENTION=true \
         -DCMAKE_VERBOSE_MAKEFILE=true \
         "${CMAKE_CONF_OPTIONS[@]}" \
         -DBUILD_SHARED_LIBS=${SHARED} \
@@ -74,6 +76,7 @@ func_configure_make_install() {
       SHARED=OFF
       ${CMAKE_BINARY} -DCMAKE_INSTALL_PREFIX=${OUTPUT_DIR} \
         -DCMAKE_VERBOSE_MAKEFILE=true \
+        -DUSE_GNU_INSTALL_CONVENTION=true \
         "${CMAKE_CONF_OPTIONS[@]}" \
         -DBUILD_SHARED_LIBS=${SHARED} \
         -DUSE_RPATH=${ENABLE_RPATH} \
@@ -92,24 +95,26 @@ func_configure_make_install() {
   if [ "${ARGUMENTS[1]}" == "-test" ]; then
     echo -e "\nBuilding tests for $(echo ${PACKAGE_VERSION})...\n"
 
-    VESRION_NUMBER=$(echo ${PACKAGE_VERSION} | awk ' { print $3 } ')
-    mkdir -p ${OUTPUT_DIR}/share/plplot${VESRION_NUMBER}/examples
-    cd ${OUTPUT_DIR}/share/plplot${VESRION_NUMBER}/examples
-    cmake -DPLD_psc=${PLD_PSC} -DBUILD_TEST=${TEST_STATUS}
-    ${GMAKE} -j test_noninteractive
-    export RETVAL=$?
-    if [ "${RETVAL}" -eq 0 ]; then
-      echo -e "\nLook for output from all tests in\n\n    ${OUTPUT_DIR}/share/plplot${VESRION_NUMBER}/examples/test_examples_output_dir\n"
-    fi
+    # TODO
+    # VESRION_NUMBER=$(echo ${PACKAGE_VERSION} | awk ' { print $3 } ')
+    # mkdir -p ${OUTPUT_DIR}/share/plplot${VESRION_NUMBER}/examples
+    # cd ${OUTPUT_DIR}/share/plplot${VESRION_NUMBER}/examples
+    # cmake -DPLD_psc=${PLD_PSC} -DBUILD_TEST=${TEST_STATUS}
+    # ${GMAKE} -j test_noninteractive
+    # export RETVAL=$?
+    # if [ "${RETVAL}" -eq 0 ]; then
+    #   echo -e "\nLook for output from all tests in\n\n    ${OUTPUT_DIR}/share/plplot${VESRION_NUMBER}/examples/test_examples_output_dir\n"
+    # fi
   fi
 
-  if ([ $(uname) == "Darwin" ] && [ "${FC}" == "ifort" ] && [ "${RETVAL}" -eq 0 ]); then
+  # NOTE: I don't know what this is for, copied in from plplot template:
+  if [ $(uname) == "Darwin" ] && [ "${FC}" == "ifort" ] && [ "${RETVAL}" -eq 0 ]; then
     ln -s /opt/intel/lib/* ${OUTPUT_DIR}/lib/ &>/dev/null 2>&1
   fi
 
-  if [ -d ${OUTPUT_DIR}/lib/fortran/modules/plplot ]; then
-    cp ${OUTPUT_DIR}/lib/fortran/modules/plplot/* ${OUTPUT_DIR}/modules
-  fi
+  echo "BUILD COMPLETE! Installing to ${OUTPUT_DIR}/modules"
+  ls -l "${OUTPUT_DIR}/lib"
+  cp -rf ${OUTPUT_DIR}/lib/* ${OUTPUT_DIR}/modules
 }
 
 # Function that contains Package Specific files and directories to be removed
